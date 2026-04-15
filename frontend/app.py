@@ -15,7 +15,7 @@ if uploaded_file is not None:
         with st.spinner('Processing...'):
             files = {"file": uploaded_file.getvalue()}
             # Replace localhost with your AWS EC2 Public IP after deployment
-            response = requests.post("http://localhost:8000/analyze", files=files)
+            response = requests.post("http://54.226.75.102:8000/analyze", files=files)
             
             if response.status_code == 200:
                 data = response.json()
