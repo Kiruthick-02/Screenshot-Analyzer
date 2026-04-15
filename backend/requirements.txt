@@ -1,8 +1,10 @@
 fastapi
 uvicorn
 pytesseract
-opencv-python-headless
-numpy
+opencv-python-headless<4.10
+numpy<2.0.0
 transformers
 torch
 python-multipart
+boto3
+python-dotenv
