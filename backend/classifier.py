@@ -1,25 +1,46 @@
 from transformers import pipeline
 
-# Load the classifier
-classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+# Load a reliable zero-shot classifier
+classifier = pipeline("zero-shot-classification", model="valhalla/distilbart-mnli-12-1")
 
 def classify_and_suggest(text):
-    # 1. Added "Certificate or Document" to the labels
-    labels = ["Error Message", "Chat Conversation", "Code Snippet", "Invoice/Bill", "Certificate or Document"]
+    text_lower = text.lower()
     
-    # 2. Run classification
-    result = classifier(text[:512], candidate_labels=labels)
+    # --- 1. KEYWORD BACKUP (Rule-Based) ---
+    # This ensures common screenshots are caught even if AI confidence is low
+    if any(word in text_lower for word in ["total", "amount", "order", "price", "tax", "invoice", "bill", "qty"]):
+        return "Invoice/Bill", 0.95, "Insight: Detected financial keywords. Verified as an Invoice/Bill."
     
-    category = result['labels'][0]
-    score = result['scores'][0]
+    if any(word in text_lower for word in ["error", "exception", "traceback", "failed", "warning", "stack", "line"]):
+        return "Error Message", 0.95, "Suggestion: This looks like a system error. Check the stack trace or logs."
     
-    # 3. Enhanced insights for certificates
-    insights = {
-        "Error Message": "Suggestion: Check documentation for the specific error code found.",
-        "Chat Conversation": "Insight: Sentiment analysis suggests a neutral tone.",
-        "Code Snippet": "Suggestion: Detected syntax. Ensure all brackets are closed.",
-        "Invoice/Bill": "Insight: Total amount and date should be verified manually.",
-        "Certificate or Document": "Insight: This looks like a formal certificate. Validated name and Certificate ID found."
-    }
+    if any(word in text_lower for word in ["def ", "class ", "import ", "void ", "{", "public ", "print("]):
+        return "Code Snippet", 0.95, "Suggestion: Detected programming syntax. Review logic and closed brackets."
+
+    if any(word in text_lower for word in ["certificate", "recognition", "presented", "awarded"]):
+        return "Certificate", 0.95, "Insight: Formal document recognized as a Certificate."
+
+    # --- 2. AI CLASSIFICATION (Fallback) ---
+    labels = ["Error Message", "Chat Conversation", "Code Snippet", "Invoice/Bill", "Certificate"]
     
-    return category, score, insights.get(category, "No suggestion available.")
+    try:
+        result = classifier(text[:512], candidate_labels=labels)
+        category = result['labels'][0]
+        score = result['scores'][0]
+        
+        # If AI is very unsure, call it a "General Document"
+        if score < 0.35:
+            return "General Document", score, "Insight: General text detected with no specific category."
+
+        insights = {
+            "Error Message": "Suggestion: Check system documentation for this error.",
+            "Chat Conversation": "Insight: Natural language conversation detected.",
+            "Code Snippet": "Suggestion: Programming code detected. Check for syntax errors.",
+            "Invoice/Bill": "Insight: Financial document. Please verify the total amount.",
+            "Certificate": "Insight: This is a formal document of recognition."
+        }
+        
+        return category, score, insights.get(category, "No specific suggestion.")
+        
+    except Exception as e:
+        return "Unclassified", 0.0, f"Error in AI analysis: {str(e)}"
